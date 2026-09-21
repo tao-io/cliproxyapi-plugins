@@ -1,4 +1,8 @@
-# CLIProxyAPI plugins
+# CLIProxyAPI plugins (tao-io fork)
+
+Fork of [`UNICKCHENG/cliproxyapi-plugins`](https://github.com/UNICKCHENG/cliproxyapi-plugins) for the TAO cliproxy. The Go module path stays `github.com/UNICKCHENG/cliproxyapi-plugins/...` so upstream can still be merged.
+
+This repo is **only the plugins**, not the Management Center UI (`router-for-me/Cli-Proxy-API-Management-Center`) and not the host binary. Today it holds `auth-cursor` plus our patches: the Cursor quota page, JWT `planUsage` fetch, and additional-pool cooldown.
 
 Third-party plugins for [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI). Add this repository as a store source; the host installs plugins from `registry.json`.
 

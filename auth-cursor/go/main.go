@@ -202,6 +202,10 @@ func handleMethod(method string, request []byte) ([]byte, error) {
 		return countTokens(request)
 	case pluginabi.MethodExecutorHTTPRequest:
 		return httpRequest()
+	case pluginabi.MethodManagementRegister:
+		return managementRegister()
+	case pluginabi.MethodManagementHandle:
+		return managementHandle(request)
 	default:
 		return errorEnvelope("unknown_method", "unknown method: "+method), nil
 	}

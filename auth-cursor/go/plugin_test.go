@@ -422,6 +422,23 @@ func TestRunFailureClassification(t *testing.T) {
 	}
 }
 
+func TestRunFailureUsageLimitIsRetryable429(t *testing.T) {
+	failure := runFailure("You've hit your usage limit · you saved $312 on API model usage. Usage will reset when your monthly cycle ends on 9/23/2026.")
+	if failure.HTTPStatus != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429 so the host failovers the credential", failure.HTTPStatus)
+	}
+	if !failure.Retryable {
+		t.Fatal("retryable = false, want true")
+	}
+	if gjson.Get(failure.Message, "error.type").String() == "invalid_request_error" {
+		t.Fatalf("usage limit must not be a request fault: %s", failure.Message)
+	}
+	until, ok := usageLimitResetAt("monthly cycle ends on 9/23/2026. You've hit your usage limit")
+	if !ok || until != time.Date(2026, 9, 23, 0, 0, 0, 0, time.UTC) {
+		t.Fatalf("reset at %v ok=%t, want 2026-09-23 UTC", until, ok)
+	}
+}
+
 func TestSdkErrorDetailsAreRecoveredFromAConnectError(t *testing.T) {
 	bridge := useFakeBridge(t)
 	process := poolBridge(t)

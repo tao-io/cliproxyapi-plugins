@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -21,6 +24,9 @@ type upstreamFailure struct {
 	HTTPStatus int
 	// Retryable reports whether Cursor marked the failure as worth retrying.
 	Retryable bool
+	// AdditionalPoolUntil is set when this failure exhausted the extra-model API pool.
+	// Zero means the credential's included pool (Composer, Grok, Auto) is unaffected.
+	AdditionalPoolUntil time.Time
 }
 
 // upstreamError carries an upstreamFailure through the error interface so the classification
@@ -253,7 +259,62 @@ func runFailure(message string) upstreamFailure {
 			return requestFault("model_not_available", message)
 		}
 	}
+	if until, ok := usageLimitResetAt(message); ok {
+		return usageLimitFailure(message, until)
+	}
 	return requestFault("run_failed", message)
+}
+
+// usageLimitMarkers are the free-form run texts Cursor emits when the account's
+// included extra-model pool is exhausted. Those runs arrive without
+// SDK_ERROR_CODE_USAGE_LIMIT_EXCEEDED, so the host would otherwise treat them as
+// 400 invalid_request_error and never fail over to another Cursor key.
+var usageLimitMarkers = []string{
+	"you've hit your usage limit",
+	"you have hit your usage limit",
+	"hit your usage limit",
+}
+
+// usageLimitResetAt reports when a usage-limit run becomes eligible again.
+// Dates like 9/23/2026 have no timezone; the cooldown starts at 00:00 UTC on
+// that calendar day so the account is not probed a few hours early.
+func usageLimitResetAt(message string) (time.Time, bool) {
+	lower := strings.ToLower(message)
+	matched := false
+	for _, marker := range usageLimitMarkers {
+		if strings.Contains(lower, marker) {
+			matched = true
+			break
+		}
+	}
+	if !matched {
+		return time.Time{}, false
+	}
+	if loc := usageLimitDate.FindStringSubmatch(message); len(loc) == 4 {
+		month, _ := strconv.Atoi(loc[1])
+		day, _ := strconv.Atoi(loc[2])
+		year, _ := strconv.Atoi(loc[3])
+		if month >= 1 && month <= 12 && day >= 1 && day <= 31 && year >= 2020 {
+			return time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC), true
+		}
+	}
+	return time.Now().UTC().Add(30 * 24 * time.Hour).Truncate(24 * time.Hour), true
+}
+
+var usageLimitDate = regexp.MustCompile(`\b(\d{1,2})/(\d{1,2})/(\d{4})\b`)
+
+func usageLimitFailure(message string, until time.Time) upstreamFailure {
+	wait := time.Until(until)
+	if wait < 0 {
+		wait = 0
+	}
+	text := fmt.Sprintf("%s (retry after %s)", message, wait.Round(time.Second))
+	return upstreamFailure{
+		Message:             upstreamErrorText(http.StatusTooManyRequests, text),
+		HTTPStatus:          http.StatusTooManyRequests,
+		Retryable:           true,
+		AdditionalPoolUntil: until.UTC(),
+	}
 }
 
 // runFailureFromResult classifies a terminal non-success run. A run that reached this point

@@ -130,13 +130,19 @@ func modelInfoFromCatalog(model *sdkv1.SdkModel) (pluginapi.ModelInfo, bool) {
 // otherwise the global oauth-excluded-models list plus any per-account excluded-models in
 // the auth file. The catalog is filtered here because /v1/models is this response.
 func excludedModelsForRequest(host pluginapi.HostConfigSummary, attributes map[string]string, storage []byte) []string {
+	var out []string
 	if attributes != nil {
 		if combined := strings.TrimSpace(attributes["excluded_models"]); combined != "" {
-			return strings.Split(combined, ",")
+			out = strings.Split(combined, ",")
 		}
 	}
-	out := append([]string(nil), hostExcludedModels(host)...)
-	return append(out, excludedModelsFromStorage(storage)...)
+	if out == nil {
+		out = append(append([]string(nil), hostExcludedModels(host)...), excludedModelsFromStorage(storage)...)
+	}
+	if _, cooled := additionalPoolCooledUntil(storage, additionalPoolNow()); cooled {
+		out = append(out, additionalPoolPatterns...)
+	}
+	return out
 }
 
 func hostExcludedModels(host pluginapi.HostConfigSummary) []string {

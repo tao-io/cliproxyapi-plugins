@@ -5,6 +5,9 @@ package-lock.json
 # `go build ./...` inside a package directory named "go" drops a binary called "go".
 auth-cursor/go/go
 
+# Local build cache from `go mod vendor` on the VPS; not part of the source tree.
+auth-cursor/go/vendor/
+
 
 # Tooling metadata
 .vscode/*

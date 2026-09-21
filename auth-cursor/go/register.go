@@ -71,6 +71,7 @@ type registrationCapability struct {
 	ExecutorModelScope    string   `json:"executor_model_scope"`
 	ExecutorInputFormats  []string `json:"executor_input_formats"`
 	ExecutorOutputFormats []string `json:"executor_output_formats"`
+	ManagementAPI         bool     `json:"management_api"`
 }
 
 func defaultPluginConfig() pluginConfig {
@@ -200,6 +201,7 @@ func pluginRegistration() registration {
 			ExecutorModelScope:    string(pluginapi.ExecutorModelScopeBoth),
 			ExecutorInputFormats:  []string{"chat-completions"},
 			ExecutorOutputFormats: []string{"chat-completions"},
+			ManagementAPI:         true,
 		},
 	}
 }

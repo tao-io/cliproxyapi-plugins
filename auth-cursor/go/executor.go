@@ -39,9 +39,14 @@ func execute(raw []byte) ([]byte, error) {
 	flight := registerInFlight(cancel)
 	defer unregisterInFlight(flight)
 	logCtx := newRequestLogContext(ctx, req.ExecutorRequest, model)
+	if failure, blocked := additionalPoolBlocked(req.ExecutorRequest, model); blocked {
+		logCtx.failed(failure.Message)
+		return upstreamErrorEnvelope("executor_error", failure.Message, failure.HTTPStatus, failure.Retryable), nil
+	}
 	result, errRun := runGenerate(ctx, generateReq, nil)
 	if errRun != nil {
 		failure := failureFrom(errRun)
+		rememberUsageLimit(req.ExecutorRequest, model, failure)
 		logCtx.failed(failure.Message)
 		return upstreamErrorEnvelope("executor_error", failure.Message, failure.HTTPStatus, failure.Retryable), nil
 	}
@@ -95,7 +100,13 @@ func executeStream(raw []byte) ([]byte, error) {
 				closePluginStream(streamID, message)
 			}
 		}()
+		if failure, blocked := additionalPoolBlocked(req.ExecutorRequest, model); blocked {
+			logCtx.failed(failure.Message)
+			closePluginStream(streamID, failure.Message)
+			return
+		}
 		if errRun := forwardStream(ctx, streamID, model, framing, generateReq, &logCtx); errRun != nil {
+			rememberUsageLimit(req.ExecutorRequest, model, failureFrom(errRun))
 			closePluginStream(streamID, errRun.Error())
 			return
 		}
